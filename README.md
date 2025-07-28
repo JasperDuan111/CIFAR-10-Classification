@@ -14,7 +14,7 @@ A PyTorch implementation for CIFAR-10 image classification using a custom CNN ar
 ## Project Structure
 
 ```
-CIFAR10/
+CIFAR-10-Classification/
 ├── data/                   # Dataset storage
 ├── model/                  # Saved model checkpoints
 ├── test_images/           # Sample test images
@@ -40,7 +40,7 @@ CIFAR10/
 ### Training
 
 Run the training script:
-```bash
+```
 python train.py
 ```
 
@@ -52,7 +52,7 @@ The script will:
 ### Testing
 
 Test the model on a single image:
-```bash
+```
 python test.py
 ```
 
