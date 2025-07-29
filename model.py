@@ -11,8 +11,7 @@ class Mynet(nn.Module):
             nn.Conv2d(32, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout2d(0.1)
+            nn.MaxPool2d(kernel_size=2, stride=2)
         )
         
         self.conv2 = nn.Sequential(
@@ -22,8 +21,7 @@ class Mynet(nn.Module):
             nn.Conv2d(64, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout2d(0.3)
+            nn.MaxPool2d(kernel_size=2, stride=2)
         )
         
         self.conv3 = nn.Sequential(
@@ -33,8 +31,7 @@ class Mynet(nn.Module):
             nn.Conv2d(128, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Dropout2d(0.5)
+            nn.MaxPool2d(kernel_size=2, stride=2)
         )
         
         self.fc = nn.Sequential(
