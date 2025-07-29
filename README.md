@@ -1,6 +1,7 @@
 # CIFAR-10 Image Classification
 
 A PyTorch implementation for CIFAR-10 image classification using a custom CNN architecture.
+The accuracy reaches 0.89.
 
 ## Features
 
