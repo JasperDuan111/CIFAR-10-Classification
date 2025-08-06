@@ -1,7 +1,7 @@
 # CIFAR-10 Image Classification
 
 A PyTorch implementation for CIFAR-10 image classification using a custom CNN architecture.
-The accuracy reaches 0.89.
+~~The accuracy reaches 0.89.~~ **Using the architecture of the simplified Inception_v2, the accuracy reaches 0.9277.**
 
 ## Features
 
@@ -80,3 +80,4 @@ The CNN model consists of:
 
 ### Test_images
 Comes from the Internet
+
