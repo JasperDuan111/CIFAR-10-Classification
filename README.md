@@ -7,7 +7,7 @@ A PyTorch implementation for CIFAR-10 image classification using different CNN a
 
 ## Features
 
-- Custom CNN architecture with batch normalization and dropout
+- CNN architecture with batch normalization and dropout
 - Data augmentation for improved training
 - Comprehensive evaluation metrics (accuracy, precision, recall, F1-score)
 - Model checkpointing with best accuracy tracking
@@ -82,6 +82,7 @@ The CNN model consists of:
 
 ### Test_images
 Comes from the Internet
+
 
 
 
