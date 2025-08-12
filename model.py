@@ -143,16 +143,14 @@ class InceptionNet(nn.Module):
         self.maxpool4 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)  # 第三次下采样：8x8 -> 4x4
 
         self.inception5a = InceptionBlock(512, 256, 160, 320, 32, 128, 128)  # 输出: 256+320+128+128 = 832
-        # 简化最后一层
-        self.inception5b = InceptionBlock(832, 384, 192, 384, 48, 128, 128)  # 输出: 384+384+128+128 = 1024 
+        # self.inception5b = InceptionBlock(832, 384, 192, 384, 48, 128, 128)  # 输出: 384+384+128+128 = 1024 
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) 
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(1024, 512),  
-            nn.BatchNorm1d(512),
+            nn.BatchNorm1d(832),
             nn.Dropout(0.3),
-            nn.Linear(512, 10)  
+            nn.Linear(832, 10)  
         )
 
     def forward(self, x):
@@ -168,7 +166,7 @@ class InceptionNet(nn.Module):
         # x = self.inception4e(x)
         x = self.maxpool4(x)
         x = self.inception5a(x)
-        x = self.inception5b(x)  
+        # x = self.inception5b(x)  # 简化网络
         x = self.avgpool(x)
         x = self.fc(x)
         return x
@@ -455,4 +453,5 @@ if __name__ == "__main__":
     test_inception_model()
     test_ResNet_model()
     test_alexnet_model()
+
     test_vggnet_model()
