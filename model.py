@@ -1,3 +1,4 @@
+from xml.parsers.expat import model
 from torch import nn
 import torch
 
@@ -143,14 +144,15 @@ class InceptionNet(nn.Module):
 
         self.inception5a = InceptionBlock(512, 256, 160, 320, 32, 128, 128)  # 输出: 256+320+128+128 = 832
         # 简化最后一层
-        # self.inception5b = InceptionBlock(832, 384, 192, 384, 48, 128, 128)  # 输出: 384+384+128+128 = 1024 
+        self.inception5b = InceptionBlock(832, 384, 192, 384, 48, 128, 128)  # 输出: 384+384+128+128 = 1024 
 
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) 
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.BatchNorm1d(832),
+            nn.Linear(1024, 512),  
+            nn.BatchNorm1d(512),
             nn.Dropout(0.3),
-            nn.Linear(832, 10)  
+            nn.Linear(512, 10)  
         )
 
     def forward(self, x):
@@ -166,32 +168,12 @@ class InceptionNet(nn.Module):
         # x = self.inception4e(x)
         x = self.maxpool4(x)
         x = self.inception5a(x)
-        # x = self.inception5b(x)  # 简化网络
+        x = self.inception5b(x)  
         x = self.avgpool(x)
         x = self.fc(x)
         return x
 
-# 测试模型是否适用于CIFAR-10
-def test_inception_model():
-    model = InceptionNet()
-    model.eval()
 
-    # 创建一个CIFAR-10尺寸的测试输入 (batch_size=4, channels=3, height=32, width=32)
-    test_input = torch.randn(4, 3, 32, 32)
-    print("Input shape:", test_input.shape)
-    
-    with torch.no_grad():
-        output = model(test_input)
-
-    print("Output shape:", output.shape)
-    print("Model parameters:", sum(p.numel() for p in model.parameters()))
-    print("CIFAR-10 Inception model test passed!")
-    
-    return model
-
-# 测试输出是否正确
-# if __name__ == "__main__":
-#     test_inception_model()
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, stride=1):
@@ -269,6 +251,147 @@ class ResNet18(nn.Module):
         x = self.fc(x)
         return x
     
+
+class AlexNet(nn.Module):
+    def __init__(self, num_classes=10):
+        super(AlexNet, self).__init__()
+        
+        # 特征提取层 - 针对CIFAR-10 (32x32)进行调整
+        self.features = nn.Sequential(
+            # 第一层：卷积+ReLU+池化
+            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),  # 32x32x64
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),  # 16x16x64
+            
+            # 第二层：卷积+ReLU+池化
+            nn.Conv2d(64, 192, kernel_size=3, padding=1),  # 16x16x192
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),  # 8x8x192
+            
+            # 第三层：卷积+ReLU
+            nn.Conv2d(192, 384, kernel_size=3, padding=1),  # 8x8x384
+            nn.ReLU(inplace=True),
+            
+            # 第四层：卷积+ReLU
+            nn.Conv2d(384, 256, kernel_size=3, padding=1),  # 8x8x256
+            nn.ReLU(inplace=True),
+            
+            # 第五层：卷积+ReLU+池化
+            nn.Conv2d(256, 256, kernel_size=3, padding=1),  # 8x8x256
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(kernel_size=2, stride=2),  # 4x4x256
+        )
+        
+        self.avgpool = nn.AdaptiveAvgPool2d((2, 2))  # 2x2x256
+        
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Dropout(0.5),
+            nn.Linear(256 * 2 * 2, 1024),  # 1024 = 256 * 2 * 2
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(1024, 512),
+            nn.ReLU(inplace=True),
+            nn.Linear(512, num_classes),
+        )
+    
+    def forward(self, x):
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = self.classifier(x)
+        return x
+
+
+class VGGNet(nn.Module):
+    def __init__(self, num_classes=10, vgg_type='VGG16'):
+        super(VGGNet, self).__init__()
+        
+        # VGG配置：每个数字表示卷积层的输出通道数，'M'表示MaxPool
+        configs = {
+            'VGG11': [64, 'M', 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+            'VGG13': [64, 64, 'M', 128, 128, 'M', 256, 256, 'M', 512, 512, 'M', 512, 512, 'M'],
+            'VGG16': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 'M', 512, 512, 512, 'M', 512, 512, 512, 'M'],
+            'VGG19': [64, 64, 'M', 128, 128, 'M', 256, 256, 256, 256, 'M', 512, 512, 512, 512, 'M', 512, 512, 512, 512, 'M']
+        }
+        
+        self.features = self._make_layers(configs[vgg_type])
+        
+        # 自适应池化，确保输出固定尺寸
+        self.avgpool = nn.AdaptiveAvgPool2d((2, 2))
+        
+        # 分类器
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(512 * 2 * 2, 1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(1024, 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.5),
+            nn.Linear(512, num_classes),
+        )
+    
+    def _make_layers(self, config):
+        layers = []
+        in_channels = 3
+        
+        for x in config:
+            if x == 'M':
+                layers += [nn.MaxPool2d(kernel_size=2, stride=2)]
+            else:
+                layers += [
+                    nn.Conv2d(in_channels, x, kernel_size=3, padding=1),
+                    nn.BatchNorm2d(x),
+                    nn.ReLU(inplace=True)
+                ]
+                in_channels = x
+        
+        return nn.Sequential(*layers)
+    
+    def forward(self, x):
+        x = self.features(x)
+        x = self.avgpool(x)
+        x = self.classifier(x)
+        return x
+    
+
+# 测试模型是否适用于CIFAR-10
+
+def test_mynet_model():
+    model = Mynet()
+    model.eval()
+
+    # 创建一个CIFAR-10尺寸的测试输入 (batch_size=4, channels=3, height=32, width=32)
+    test_input = torch.randn(4, 3, 32, 32)
+    print("Input shape:", test_input.shape)
+
+    with torch.no_grad():
+        output = model(test_input)
+
+    print("Output shape:", output.shape)
+    print("Model parameters:", sum(p.numel() for p in model.parameters()))
+    print("CIFAR-10 Mynet model test passed!")
+    print("=" * 60)
+
+    return model
+
+def test_inception_model():
+    model = InceptionNet()
+    model.eval()
+
+    # 创建一个CIFAR-10尺寸的测试输入 (batch_size=4, channels=3, height=32, width=32)
+    test_input = torch.randn(4, 3, 32, 32)
+    print("Input shape:", test_input.shape)
+    
+    with torch.no_grad():
+        output = model(test_input)
+
+    print("Output shape:", output.shape)
+    print("Model parameters:", sum(p.numel() for p in model.parameters()))
+    print("CIFAR-10 Inception model test passed!")
+    print("=" * 60)
+    return model
+
 def test_ResNet_model():
     model = ResNet18()
     model.eval()
@@ -283,11 +406,53 @@ def test_ResNet_model():
     print("Output shape:", output.shape)
     print("Model parameters:", sum(p.numel() for p in model.parameters()))
     print("CIFAR-10 ResNet model test passed!")
+    print("=" * 60)
+    return model
 
+def test_alexnet_model():
+    model = AlexNet()
+    model.eval()
+
+    # 创建一个CIFAR-10尺寸的测试输入 (batch_size=4, channels=3, height=32, width=32)
+    test_input = torch.randn(4, 3, 32, 32)
+    print("Input shape:", test_input.shape)
+    
+    with torch.no_grad():
+        output = model(test_input)
+
+    print("Output shape:", output.shape)
+    print("Model parameters:", sum(p.numel() for p in model.parameters()))
+    print("CIFAR-10 AlexNet model test passed!")
+    print("=" * 60)
     return model
 
 
-# if __name__ == "__main__":
-#     test_ResNet_model()
-
+def test_vggnet_model():
+    # 测试不同的VGG变体
+    vgg_types = ['VGG11', 'VGG13', 'VGG16', 'VGG19']
     
+    for vgg_type in vgg_types:
+        print(f"\nTesting {vgg_type}:")
+        model = VGGNet(vgg_type=vgg_type)
+        model.eval()
+
+        # 创建一个CIFAR-10尺寸的测试输入 (batch_size=4, channels=3, height=32, width=32)
+        test_input = torch.randn(4, 3, 32, 32)
+        print("Input shape:", test_input.shape)
+        
+        with torch.no_grad():
+            output = model(test_input)
+
+        print("Output shape:", output.shape)
+        print("Model parameters:", sum(p.numel() for p in model.parameters()))
+        print(f"CIFAR-10 {vgg_type} model test passed!")
+    print("=" * 60)
+    return model
+
+
+if __name__ == "__main__":
+    test_mynet_model()
+    test_inception_model()
+    test_ResNet_model()
+    test_alexnet_model()
+    test_vggnet_model()
