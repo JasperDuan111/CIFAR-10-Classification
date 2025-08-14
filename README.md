@@ -81,7 +81,8 @@ The CNN model consists of:
 - truck
 
 ### Test_images
-Comes from the Internet
+From the Internet
+
 
 
 
