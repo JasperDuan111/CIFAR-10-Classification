@@ -1,19 +1,23 @@
 import torch
 from torch import nn
-from model import Mynet
+from model import Mynet, InceptionNet, ResNet18, AlexNet, VGGNet, InceptionNetGeLU, MobileNet
 from Data import get_data
 from sklearn.metrics import precision_score, recall_score, f1_score
 import numpy as np
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-mynet = Mynet().to(device)
+mynet = InceptionNet().to(device)
+# mynet.load_state_dict(torch.load('./model/mynet_best_model.pth', map_location=device))
 loss_function = nn.CrossEntropyLoss().to(device)
-optimizer = torch.optim.Adam(mynet.parameters())
+optimizer = torch.optim.AdamW(
+    mynet.parameters(),
+    lr=0.01,               
+    weight_decay=0.01,      
+)
 
-# 学习率调度（当loss连续三次没有下降时，学习率减半）
+# ReduceLROnPlateau学习率调度（当每个epoch的loss连续三次没有下降时，学习率减半）
 # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-#     optimizer, mode='min', factor=0.5, patience=3)
+#     optimizer, mode='min', factor=0.5, patience=5)
 
 train_step = 0
 epochs = 30
@@ -21,9 +25,25 @@ best_accuracy = 0.0
 
 if __name__ == "__main__":
     train_data_loader, test_data_loader = get_data()
+    # # OneCycleLR 学习率调度器
+    # steps_per_epoch = len(train_data_loader)
+    # scheduler = torch.optim.lr_scheduler.OneCycleLR(
+    #     optimizer,
+    #     max_lr=0.1,            # 训练中最大的学习率
+    #     epochs=epochs,
+    #     steps_per_epoch=steps_per_epoch,
+    #     pct_start=0.3,          # 上升阶段占比（前30%时间用于上升）
+    #     anneal_strategy='cos',  # 余弦退火策略
+    #     div_factor=25.0,        # 初始 lr = max_lr / div_factor
+    #     final_div_factor=1e4,   # 最终 lr = max_lr / final_div_factor
+    #     cycle_momentum=True,       # 开启动量反向调度
+    #     base_momentum=0.85,        
+    #     max_momentum=0.95        
+    # )
+    
     for epoch in range(epochs):
         mynet.train()
-        for j, (image, label) in enumerate(train_data_loader):
+        for i, (image, label) in enumerate(train_data_loader):
             image = image.to(device)
             label = label.to(device)
 
@@ -32,6 +52,8 @@ if __name__ == "__main__":
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            # OneCycleLR更新学习率
+            # scheduler.step()  
 
             train_step += 1
             if train_step % 100 == 0:
@@ -43,7 +65,7 @@ if __name__ == "__main__":
         all_labels = []
         
         with torch.no_grad():
-            for j, (image, label) in enumerate(test_data_loader):
+            for i, (image, label) in enumerate(test_data_loader):
                 image = image.to(device)
                 label = label.to(device)
 
@@ -75,10 +97,11 @@ if __name__ == "__main__":
         print(f"F1-Score: {f1:.4f}")
         print("----------------------------")
         
-        # 取消以下注释以使用学习率调度
+        # 取消以下注释以使用ReduceLROnPlateau学习率调度
         # scheduler.step(avg_test_loss)
 
         if accuracy > best_accuracy:
             best_accuracy = accuracy
-            torch.save(mynet.state_dict(), f'./model/mynet_best_model.pth')
+            torch.save(mynet.state_dict(), f'./model/{mynet.__class__.__name__}_best_model.pth')
             print(f"New best model saved with accuracy: {accuracy:.4f}")
+            print("----------------------------")
