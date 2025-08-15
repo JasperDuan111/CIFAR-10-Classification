@@ -352,6 +352,89 @@ class VGGNet(nn.Module):
         x = self.classifier(x)
         return x
     
+class DepthwiseSeparableConv(nn.Module):
+
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(DepthwiseSeparableConv, self).__init__()
+        
+        # 深度卷积：每个输入通道使用一个3x3卷积核
+        self.depthwise = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=stride,
+                      padding=1, groups=in_channels, bias=False),
+            nn.BatchNorm2d(in_channels),
+            nn.ReLU(inplace=True)
+        )
+        
+        # 点卷积：使用1x1卷积来组合特征
+        self.pointwise = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1,
+                      padding=0, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+    
+    def forward(self, x):
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        return x
+
+
+class MobileNet(nn.Module):
+
+    def __init__(self, num_classes=10):
+        super(MobileNet, self).__init__()
+        
+        # 第一层：标准卷积
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=3, stride=1, padding=1, bias=False), # 原模型stride=2(对于输入224*224)
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True)
+        )
+        
+        # MobileNet layers配置: (out_channels, stride)
+        self.layers_config = [
+            (64, 1),    # 32x32
+            (128, 2),   # 16x16
+            (128, 1),   # 16x16
+            (256, 2),   # 8x8
+            (256, 1),   # 8x8
+            (512, 2),   # 4x4
+            (512, 1),   # 4x4
+            (512, 1),   # 4x4
+            (512, 1),   # 4x4
+            (512, 1),   # 4x4
+            (512, 1),   # 4x4
+            (1024, 2),  # 2x2
+            (1024, 1),  # 2x2
+        ]
+        
+        # 构建MobileNet层
+        layers = []
+        in_channels = 32
+
+        for out_channels, stride in self.layers_config:
+            layers.append(DepthwiseSeparableConv(in_channels, out_channels, stride))
+            in_channels = out_channels
+        
+        self.features = nn.Sequential(*layers)
+        
+        # 全局平均池化和分类器
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.BatchNorm1d(1024),
+            nn.Dropout(0.2),
+            nn.Linear(1024, num_classes)
+        )
+        
+    
+    def forward(self, x):
+        x = self.conv1(x)       # 32x32x32
+        x = self.features(x)    # 通过所有深度可分离卷积层
+        x = self.avgpool(x)     # 1x1x1024
+        x = self.classifier(x)  
+        return x
+
 
 class InceptionBlockGeLU(nn.Module):
     def __init__(self, in_channels, out_1x1, reduce_3x3, out_3x3, reduce_5x5, out_5x5, pool_proj):
@@ -588,6 +671,25 @@ def test_inception_gelu_model():
     return model
 
 
+def test_mobilenet_model():
+    print("Testing MobileNet:")
+    model = MobileNet()
+    model.eval()
+
+    # 创建一个CIFAR-10尺寸的测试输入 (batch_size=4, channels=3, height=32, width=32)
+    test_input = torch.randn(4, 3, 32, 32)
+    print("Input shape:", test_input.shape)
+    
+    with torch.no_grad():
+        output = model(test_input)
+
+    print("Output shape:", output.shape)
+    print("Model parameters:", sum(p.numel() for p in model.parameters()))
+    print("CIFAR-10 MobileNet v1 model test passed!")
+    print("=" * 60)
+    return model
+
+
 if __name__ == "__main__":
     test_mynet_model()
     test_inception_model()
@@ -595,3 +697,4 @@ if __name__ == "__main__":
     test_alexnet_model()
     test_vggnet_model()
     test_inception_gelu_model()
+    test_mobilenet_model()
