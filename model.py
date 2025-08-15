@@ -353,6 +353,128 @@ class VGGNet(nn.Module):
         return x
     
 
+class InceptionBlockGeLU(nn.Module):
+    def __init__(self, in_channels, out_1x1, reduce_3x3, out_3x3, reduce_5x5, out_5x5, pool_proj):
+        super(InceptionBlockGeLU, self).__init__()
+        
+        # 1x1卷积分支
+        self.branch1x1 = nn.Sequential(
+            nn.Conv2d(in_channels, out_1x1, kernel_size=1),
+            nn.BatchNorm2d(out_1x1),
+            nn.GELU()  # 使用GeLU激活函数
+        )
+        
+        # 3x3卷积分支（先1x1降维，再3x3卷积）
+        self.branch3x3 = nn.Sequential(
+            nn.Conv2d(in_channels, reduce_3x3, kernel_size=1),
+            nn.BatchNorm2d(reduce_3x3),
+            nn.GELU(),
+            nn.Conv2d(reduce_3x3, out_3x3, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_3x3),
+            nn.GELU()
+        )
+
+        # 使用两层3x3卷积来代替5x5卷积（减少参数量，保持感受野）
+        self.branch5x5 = nn.Sequential(
+            nn.Conv2d(in_channels, reduce_5x5, kernel_size=1),
+            nn.BatchNorm2d(reduce_5x5),
+            nn.GELU(),
+            nn.Conv2d(reduce_5x5, out_5x5, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_5x5),
+            nn.GELU(),
+            nn.Conv2d(out_5x5, out_5x5, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_5x5),
+            nn.GELU()
+        )
+        
+        # 池化分支（3x3 MaxPool + 1x1卷积）
+        self.branch_pool = nn.Sequential(
+            nn.MaxPool2d(kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(in_channels, pool_proj, kernel_size=1),
+            nn.BatchNorm2d(pool_proj),
+            nn.GELU()
+        )
+    
+    def forward(self, x):
+        branch1x1 = self.branch1x1(x)
+        branch3x3 = self.branch3x3(x)
+        branch5x5 = self.branch5x5(x)
+        branch_pool = self.branch_pool(x)
+        
+        # 在通道维度上拼接所有分支
+        outputs = [branch1x1, branch3x3, branch5x5, branch_pool]
+        return torch.cat(outputs, 1)
+
+
+class InceptionNetGeLU(nn.Module):
+
+    def __init__(self, num_classes=10): 
+        super(InceptionNetGeLU, self).__init__()
+
+        # 输入处理层
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1),  # 32x32x64
+            nn.BatchNorm2d(64),
+            nn.GELU()
+        )
+        
+        # 第二个卷积层组
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=1),  # 32x32x64
+            nn.BatchNorm2d(64),
+            nn.GELU(),
+            nn.Conv2d(64, 192, kernel_size=3, padding=1),  # 32x32x192
+            nn.BatchNorm2d(192),
+            nn.GELU(),
+            nn.MaxPool2d(kernel_size=3, stride=2, padding=1)  # 第一次下采样：32x32 -> 16x16
+        )
+        
+        # 输出通道数计算方法： out_1x1 + out_3x3 + out_5x5 + pool_proj
+        self.inception3a = InceptionBlockGeLU(192, 64, 96, 128, 16, 32, 32)  # 输出: 64+128+32+32 = 256
+        self.inception3b = InceptionBlockGeLU(256, 128, 128, 192, 32, 96, 64)  # 输出: 128+192+96+64 = 480 
+
+        self.maxpool3 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)  # 第二次下采样：16x16 -> 8x8
+
+        self.inception4a = InceptionBlockGeLU(480, 192, 96, 208, 16, 48, 64)  # 输出: 192+208+48+64 = 512
+        self.inception4b = InceptionBlockGeLU(512, 160, 112, 224, 24, 64, 64)  # 输出: 160+224+64+64 = 512
+        self.inception4c = InceptionBlockGeLU(512, 128, 128, 256, 24, 64, 64)  # 输出: 128+256+64+64 = 512
+
+        self.maxpool4 = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)  # 第三次下采样：8x8 -> 4x4
+
+        self.inception5a = InceptionBlockGeLU(512, 256, 160, 320, 32, 128, 128)  # 输出: 256+320+128+128 = 832
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1)) 
+
+        self.fc = nn.Sequential(
+            nn.Flatten(),
+            nn.BatchNorm1d(832),
+            nn.Dropout(0.4),
+            nn.Linear(832, 256),
+            nn.GELU(),
+            nn.Dropout(0.3),
+            nn.Linear(256, num_classes)
+        )
+
+    def forward(self, x):
+        # 前向传播主路径
+        x = self.conv1(x)           # 32x32x64
+        x = self.conv2(x)           # 16x16x192
+        
+        x = self.inception3a(x)     # 16x16x256
+        x = self.inception3b(x)     # 16x16x480
+        x = self.maxpool3(x)        # 8x8x480
+        
+        x = self.inception4a(x)     # 8x8x512
+        x = self.inception4b(x)     # 8x8x512
+        x = self.inception4c(x)     # 8x8x512
+        x = self.maxpool4(x)        # 4x4x512
+        
+        x = self.inception5a(x)     # 4x4x832
+        
+        x = self.avgpool(x)         # 1x1x832
+        x = self.fc(x)    
+
+        return x
+
 # 测试模型是否适用于CIFAR-10
 
 def test_mynet_model():
@@ -447,11 +569,29 @@ def test_vggnet_model():
     print("=" * 60)
     return model
 
+def test_inception_gelu_model():
+    print("Testing InceptionNetGeLU:")
+    model = InceptionNetGeLU()
+    model.eval()
+
+    # 创建一个CIFAR-10尺寸的测试输入 (batch_size=4, channels=3, height=32, width=32)
+    test_input = torch.randn(4, 3, 32, 32)
+    print("Input shape:", test_input.shape)
+    
+    with torch.no_grad():
+        output = model(test_input)
+
+    print("Output shape:", output.shape)
+    print("Model parameters:", sum(p.numel() for p in model.parameters()))
+    print("CIFAR-10 InceptionNetGeLU model test passed!")
+    print("=" * 60)
+    return model
+
 
 if __name__ == "__main__":
     test_mynet_model()
     test_inception_model()
     test_ResNet_model()
     test_alexnet_model()
-
     test_vggnet_model()
+    test_inception_gelu_model()
