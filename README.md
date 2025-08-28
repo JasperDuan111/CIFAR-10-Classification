@@ -6,7 +6,8 @@ A PyTorch implementation for CIFAR-10 image classification using different CNN a
 
 ## Features
 
-- CNN architecture with batch normalization and dropout
+- Customized CNN architecture with batch normalization and dropout
+- Classic CNN (InceptionV2, ResNet18, AlexNet, VGGNet, MobileNet)
 - Data augmentation for improved training
 - Comprehensive evaluation metrics (accuracy, precision, recall, F1-score)
 - Model checkpointing with best accuracy tracking
